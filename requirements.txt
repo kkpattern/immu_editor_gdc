@@ -1,0 +1,2 @@
+pyside6==6.0
+pyrsistent==0.17.3
