@@ -20,6 +20,14 @@ class RecordWithUUID(PRecord):
         return result
 
 
+class ViewData(PRecord):
+    id_ = field()
+    name = field()
+    data = field()
+    submit_callback = field()
+    child_views = field()
+
+
 class DataManager(object):
     def __init__(self, initial_data):
         self._history = [initial_data]

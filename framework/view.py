@@ -42,6 +42,10 @@ class ViewBase(object):
         del self._view_children[view]
         del self._view_children_data[view]
 
+    def iter_child_view(self):
+        for view in self._view_children:
+            yield view
+
     def set_current_data(self, data):
         self.set_old_data(self._current_data)
         self._current_data = data
@@ -214,6 +218,10 @@ class ListViewBase(ViewBase):
     def refresh_children(self):
         for i, data in enumerate(self._current_element_view_data):
             self._current_element_view_list[i].try_refresh(data)
+
+    def iter_child_view(self):
+        for view in self._current_element_view_list:
+            yield view
 
     def _on_item_selection_changed(self):
         if not self._in_refresh:

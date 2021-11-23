@@ -11,4 +11,4 @@ class TodoItemData(RecordWithUUID):
 
 
 class TodoAppData(PRecord):
-    todo_list = field()
+    todo_list = field()   # a list of TodoItemData

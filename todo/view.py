@@ -2,10 +2,12 @@ from PySide6 import QtCore
 from PySide6 import QtGui
 from PySide6 import QtWidgets
 
+from framework.debug import generate_view_data
 from framework.view import ViewBase
 from framework.view import ListViewBase
 
 from todo.data import TodoItemData
+from todo.widget import DebugDialog
 
 
 LABEL_BUTTON = """
@@ -29,6 +31,7 @@ class RootView(ViewBase):
                  redo_callback):
         self._undo_callback = undo_callback
         self._redo_callback = redo_callback
+        self._debug_data = None
         super(RootView, self).__init__(submit_data_callback)
 
     def _create_child_view(self):
@@ -43,6 +46,8 @@ class RootView(ViewBase):
         self._list_view = TodoListView(self._todo_list_updated)
         self.bind_child_view(self._list_view,
                              lambda todo_app_data: todo_app_data.todo_list)
+
+        self._debug_view = DebugView()
 
     def _create_widget(self):
         widget = QtWidgets.QWidget()
@@ -70,12 +75,26 @@ class RootView(ViewBase):
         edit_menu.addAction(self._undo)
         edit_menu.addAction(self._redo)
 
+        self._view_tree = QtGui.QAction("View tree")
+        self._view_tree.triggered.connect(self._show_view_tree)
+        debug_menu = menubar.addMenu('&Debug')
+        debug_menu.addAction(self._view_tree)
+
+        main_window.setMinimumSize(200, 400)
         return main_window
 
     def _todo_list_updated(self, new_todo_list, record_in_history=True):
         current_data = self.get_current_data()
         new_data = current_data.set("todo_list", new_todo_list)
         self.submit_data(new_data, record_in_history=record_in_history)
+
+    def _show_view_tree(self):
+        self._debug_view.widget.show()
+
+    def try_refresh(self, data):
+        super(RootView, self).try_refresh(data)
+        self._debug_data = generate_view_data(self, self._debug_data)
+        self._debug_view.try_refresh(self._debug_data)
 
 
 class TodoInputView(ViewBase):
@@ -199,3 +218,66 @@ class TodoListView(ListViewBase):
 
     def _get_data_at(self, index, key, data_collection):
         return data_collection[index]
+
+
+class DebugViewTree(ViewBase):
+    def __init__(self, submit_data_callback=None):
+        super(DebugViewTree, self).__init__(submit_data_callback)
+        self._view_item = {}
+        self._children = {}
+
+    def _create_widget(self):
+        widget = QtWidgets.QTreeWidget()
+        widget.setColumnCount(3)
+        widget.setHeaderLabels(["View", "Data", "Submit data function"])
+        return widget
+
+    def refresh(self, view_data):
+        tree = self.widget
+        if view_data.id_ not in self._view_item:
+            self._add_view(view_data, tree)
+        self._update_view(view_data, self._view_item[view_data.id_])
+
+    def _add_view(self, view, parent):
+        item = QtWidgets.QTreeWidgetItem(parent)
+        self._view_item[view.id_] = item
+
+    def _update_view(self, view, item):
+        item.setText(0, view.name)
+        item.setText(1, str(view.data))
+        item.setText(2, str(view.submit_callback))
+
+        old_children = self._children.pop(view.id_, [])
+        new_children = {}
+        for child_view in view.child_views:
+            new_children[child_view.id_] = child_view
+        removed_children = []
+        for child_id in old_children:
+            if child_id not in new_children:
+                removed_children.append(child_id)
+        for child_id in removed_children:
+            child_item = self._remove_view(child_id)
+            item.removeChild(child_item)
+        for child_id, child_view in new_children.items():
+            if child_id not in old_children:
+                self._add_view(child_view, item)
+        for child_id, child_view in new_children.items():
+            self._update_view(child_view, self._view_item[child_id])
+        self._children[view.id_] = new_children
+
+    def _remove_view(self, view_id):
+        for child_id in self._children.pop(view_id, []):
+            self._remove_view(view_id)
+        return self._view_item.pop(view_id, None)
+
+
+class DebugView(ViewBase):
+    def _create_child_view(self):
+        self._tree_view = DebugViewTree()
+        self.bind_child_view(self._tree_view, lambda data: data)
+
+    def _create_widget(self):
+        dialog = DebugDialog()
+        dialog.setTreeWidget(self._tree_view.widget)
+        dialog.setMinimumSize(500, 400)
+        return dialog
