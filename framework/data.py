@@ -34,6 +34,10 @@ class DataManager(object):
         self._history_index = 0
         self._record_head_in_history = True
 
+    @property
+    def history(self):
+        return list(self._history)
+
     def get_data(self):
         return self._history[self._history_index]
 

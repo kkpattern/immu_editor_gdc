@@ -3,6 +3,7 @@ import collections
 from PySide6 import QtWidgets
 
 from framework.diff import list_diff
+from framework.widget import DebugDialog
 
 
 class _Unintialized(object):
@@ -40,7 +41,7 @@ class ViewBase(object):
 
     def unbind_child_view(self, view):
         del self._view_children[view]
-        del self._view_children_data[view]
+        self._view_children_data.pop(view, None)
 
     def iter_child_view(self):
         for view in self._view_children:
@@ -84,10 +85,9 @@ class ViewBase(object):
             self.refresh(new_data)
             self._in_refresh = False
             self.mark_should_refresh_internally(False)
-            if self.should_refresh_children():
-                for view, data_converter in self._view_children.items():
-                    self._view_children_data[view] = data_converter(new_data)
         if self.should_refresh_children():
+            for view, data_converter in self._view_children.items():
+                self._view_children_data[view] = data_converter(new_data)
             for view, data in self._view_children_data.items():
                 self._on_try_refresh_child(view, data)
 
@@ -227,3 +227,105 @@ class ListViewBase(ViewBase):
         if not self._in_refresh:
             row = self.widget.currentRow()
             self._on_selection_changed(row)
+
+
+class FormEditViewBase(ViewBase):
+    def __init__(self, submit_data_callback):
+        super(FormEditViewBase, self).__init__(submit_data_callback)
+        self.init_item_edit()
+
+    def _create_widget(self):
+        self._form_layout = QtWidgets.QFormLayout()
+        widget = QtWidgets.QWidget()
+        widget.setLayout(self._form_layout)
+        return widget
+
+    @property
+    def widget(self):
+        return self._widget
+
+    def init_item_edit(self):
+        pass
+
+    def append_item_edit(self, label, key, view_factory):
+        view = view_factory(
+            lambda new_v, record_in_history=True: self._update_item(
+                key, new_v, record_in_history))
+        self.add_row(label, view.widget)
+        self.bind_child_view(view, lambda data: getattr(data, key))
+
+    def add_row(self, name, widget):
+        label = QtWidgets.QLabel(name)
+        self._form_layout.addRow(label, widget)
+
+    def _update_item(self, key, new_v, record_in_history):
+        current_data = self.get_current_data()
+        if current_data is not self.UNINTIALIZED:
+            new_data = current_data.set(key, new_v)
+            self.submit_data(new_data, record_in_history=record_in_history)
+
+    def refresh(self, new_data):
+        pass
+
+
+class DebugViewTree(ViewBase):
+    def __init__(self, submit_data_callback=None):
+        super(DebugViewTree, self).__init__(submit_data_callback)
+        self._view_item = {}
+        self._children = {}
+
+    def _create_widget(self):
+        widget = QtWidgets.QTreeWidget()
+        widget.setColumnCount(3)
+        widget.setHeaderLabels(["View", "Data", "Submit data function"])
+        return widget
+
+    def refresh(self, view_data):
+        tree = self.widget
+        if view_data.id_ not in self._view_item:
+            self._add_view(view_data, tree)
+        self._update_view(view_data, self._view_item[view_data.id_])
+
+    def _add_view(self, view, parent):
+        item = QtWidgets.QTreeWidgetItem(parent)
+        self._view_item[view.id_] = item
+
+    def _update_view(self, view, item):
+        item.setText(0, view.name)
+        item.setText(1, str(view.data))
+        item.setText(2, str(view.submit_callback))
+
+        old_children = self._children.pop(view.id_, [])
+        new_children = {}
+        for child_view in view.child_views:
+            new_children[child_view.id_] = child_view
+        removed_children = []
+        for child_id in old_children:
+            if child_id not in new_children:
+                removed_children.append(child_id)
+        for child_id in removed_children:
+            child_item = self._remove_view(child_id)
+            item.removeChild(child_item)
+        for child_id, child_view in new_children.items():
+            if child_id not in old_children:
+                self._add_view(child_view, item)
+        for child_id, child_view in new_children.items():
+            self._update_view(child_view, self._view_item[child_id])
+        self._children[view.id_] = new_children
+
+    def _remove_view(self, view_id):
+        for child_id in self._children.pop(view_id, []):
+            self._remove_view(view_id)
+        return self._view_item.pop(view_id, None)
+
+
+class DebugView(ViewBase):
+    def _create_child_view(self):
+        self._tree_view = DebugViewTree()
+        self.bind_child_view(self._tree_view, lambda data: data)
+
+    def _create_widget(self):
+        dialog = DebugDialog()
+        dialog.setTreeWidget(self._tree_view.widget)
+        dialog.setMinimumSize(500, 400)
+        return dialog

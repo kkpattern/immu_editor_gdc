@@ -55,3 +55,9 @@ The `todo` directory contains all the todo app related code.
 The `todo/data.py` contains the data model of the todo app.
 
 The `todo/view.py` contains all the view classes of the todo app.
+
+
+## Assets
+
+Assets downloaded from [https://kenney.nl/assets/hexagon-pack](https://kenney.nl/assets/hexagon-pack).
+License: (CC0 1.0 Universal)
