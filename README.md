@@ -1,17 +1,19 @@
-This todo app is a demo for demonstrating how a immutable data based editor
+This project is a demo for demonstrating how an immutable data based editor
 framework works.
 
 The app requires python3 and PySide6 to run. It's tested on Windows and MacOS.
 
 ## Run
 
-To start the app, run `start.bat` on Windows or run `./start.sh` on MacOS.
+To start the todo app, run `start_todo.bat` on Windows or run `./start_todo.sh` on MacOS.
 
 Press `enter` in the input box to create a new todo item.
 
 Toggle the checkbox to mark a todo item finished or not.
 
 You can click the color label to change the label color for the todo item.
+
+To start the level designer, run `start_level.bat` on Windows or run `./start_level.sh` on MacOS.
 
 
 ## Debug
@@ -55,6 +57,15 @@ The `todo` directory contains all the todo app related code.
 The `todo/data.py` contains the data model of the todo app.
 
 The `todo/view.py` contains all the view classes of the todo app.
+
+
+### level
+
+The `level` directory contains all the level designer related code.
+
+The `level/data.py` contains the data model of the level designer.
+
+The `level/view.py` contains all the view classes of the level designer.
 
 
 ## Assets
