@@ -72,8 +72,8 @@ class ColorHistoryView(ListViewBase):
         self._layout.invalidate()
 
     def _take_item(self, index):
-        item = self._layout.itemAt(index)
-        self._layout.removeWidget(item.widget())
+        item = self._layout.takeAt(index)
+        item.widget().setParent(None)
 
     def _update_triggered(self, index, new_value, record_in_history=True):
         pass

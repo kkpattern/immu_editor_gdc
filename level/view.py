@@ -2,15 +2,10 @@ from PySide6 import QtCore
 from PySide6 import QtGui
 from PySide6 import QtWidgets
 
-from framework.debug import generate_view_data
 from framework.view import ViewBase
 from framework.view import ListViewBase
 from framework.view import FormEditViewBase
-from framework.view import DebugView
 
-from level.data import TreeData
-from level.data import HouseData
-from level.data import MountainData
 from level.data import Vector2
 
 
@@ -29,15 +24,6 @@ QPushButton:disabled {{
 
 
 class RootView(ViewBase):
-    def __init__(self,
-                 submit_data_callback,
-                 undo_callback,
-                 redo_callback):
-        self._undo_callback = undo_callback
-        self._redo_callback = redo_callback
-        self._debug_data = None
-        super(RootView, self).__init__(submit_data_callback)
-
     def _create_child_view(self):
         self._scene_view = SceneView(self._on_objects_changed)
         self.bind_child_view(self._scene_view,
@@ -47,8 +33,6 @@ class RootView(ViewBase):
                              lambda level_data: level_data.objects)
         self._attr_edit_view = AttrEditView(self._on_object_attr_changed)
         self.bind_child_view(self._attr_edit_view, self._get_selected_object)
-
-        self._debug_view = DebugView()
 
     def _get_selected_object(self, level_data):
         object_ = None
@@ -77,41 +61,7 @@ class RootView(ViewBase):
         main_window = QtWidgets.QMainWindow()
         main_window.setWindowTitle("Level Designer")
         main_window.setCentralWidget(widget)
-
-        self._undo = QtGui.QAction("Undo")
-        self._undo.setShortcut("ctrl+z")
-        self._undo.triggered.connect(self._undo_callback)
-
-        self._redo = QtGui.QAction("Redo")
-        self._redo.setShortcut("ctrl+y")
-        self._redo.triggered.connect(self._redo_callback)
-
-        menubar = main_window.menuBar()
-        edit_menu = menubar.addMenu('&Edit')
-
-        add_menu = QtWidgets.QMenu("Add")
-
-        self._add_actions = {}
-
-        for type_ in ["Tree", "House", "Mountain"]:
-            self._add_actions[type_] = self._create_add_action(add_menu, type_)
-
-        edit_menu.addMenu(add_menu)
-        edit_menu.addAction(self._undo)
-        edit_menu.addAction(self._redo)
-
-        self._view_tree = QtGui.QAction("View tree")
-        self._view_tree.triggered.connect(self._show_view_tree)
-        debug_menu = menubar.addMenu('&Debug')
-        debug_menu.addAction(self._view_tree)
         return main_window
-
-    def _create_add_action(self, menu, type_):
-        action = QtGui.QAction(type_)
-        action.triggered.connect(
-            lambda: self._add_object_callback(type_))
-        menu.addAction(action)
-        return action
 
     def _on_objects_changed(self, new_objects, record_in_history=True):
         new_level_data = self.get_current_data().set("objects", new_objects)
@@ -122,29 +72,6 @@ class RootView(ViewBase):
         new_objects = level_data.objects.set(new_object.id_, new_object)
         new_level_data = level_data.set("objects", new_objects)
         self.submit_data(new_level_data, record_in_history=record_in_history)
-
-    def _add_object_callback(self, type_):
-        level_data = self.get_current_data()
-        objects = level_data.objects
-        if objects:
-            new_id = max(objects.iterkeys())+1
-        else:
-            new_id = 1
-        factory = {
-            "Tree": TreeData,
-            "House": HouseData,
-            "Mountain": MountainData}[type_]
-        new_objects = objects.set(new_id, factory(id_=new_id))
-        new_level_data = level_data.set("objects", new_objects)
-        self.submit_data(new_level_data)
-
-    def _show_view_tree(self):
-        self._debug_view.widget.show()
-
-    def try_refresh(self, data):
-        super(RootView, self).try_refresh(data)
-        self._debug_data = generate_view_data(self, self._debug_data)
-        self._debug_view.try_refresh(self._debug_data)
 
 
 class ObjectListItemView(ViewBase):
@@ -163,6 +90,8 @@ class ObjectListView(ListViewBase):
 
     def _create_widget(self):
         widget = super()._create_widget()
+        widget.setSelectionMode(
+            QtWidgets.QListWidget.SelectionMode.ExtendedSelection)
         widget.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         widget.customContextMenuRequested.connect(self._context_menu)
         return widget
@@ -195,13 +124,15 @@ class ObjectListView(ListViewBase):
         return data_collection[key]
 
     def _on_selection_changed(self, index):
-        selected_id = self._current_key_list[index]
+        items = self.widget.selectedItems()
+        selected_rows = [self.widget.row(i) for i in items]
+        selected_ids = [self._current_key_list[i] for i in selected_rows]
         dirty_object = {}
         data = self.get_current_data()
         for id_, object_ in data.iteritems():
-            if object_.is_selected and id_ != selected_id:
+            if object_.is_selected and id_ not in selected_ids:
                 dirty_object[id_] = object_.set("is_selected", False)
-            elif id_ == selected_id and not object_.is_selected:
+            elif id_ in selected_ids and not object_.is_selected:
                 dirty_object[id_] = object_.set("is_selected", True)
         if dirty_object:
             evolver = data.evolver()
@@ -331,15 +262,19 @@ class SceneObjectView(ViewBase):
         self._widget.setEnableBorder(new_data.is_selected)
 
     def _on_selected(self):
-        object_data = self.get_current_data()
-        if not object_data.is_selected:
-            new_object_data = object_data.set("is_selected", True)
-            self.submit_data(new_object_data)
+        if not self._in_refresh:
+            object_data = self.get_current_data()
+            if not object_data.is_selected:
+                new_object_data = object_data.set("is_selected", True)
+                self.submit_data(new_object_data)
 
     def _on_object_pos_changed(self, pos, record_in_history):
-        object_data = self.get_current_data()
-        new_object_data = object_data.set("pos", Vector2(x=pos.x(), y=pos.y()))
-        self.submit_data(new_object_data, record_in_history=record_in_history)
+        if not self._in_refresh:
+            object_data = self.get_current_data()
+            new_object_data = object_data.set("pos",
+                                              Vector2(x=pos.x(), y=pos.y()))
+            self.submit_data(new_object_data,
+                             record_in_history=record_in_history)
 
 
 class SceneView(ViewBase):

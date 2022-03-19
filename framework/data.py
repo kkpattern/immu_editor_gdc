@@ -36,7 +36,7 @@ class DataManager(object):
 
     @property
     def history(self):
-        return list(self._history)
+        return list(self._history[:self._history_index+1])
 
     def get_data(self):
         return self._history[self._history_index]
